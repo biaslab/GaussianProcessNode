@@ -1,4 +1,5 @@
 using ReactiveMP, GraphPPL, LinearAlgebra, Random, KernelFunctions
+using DomainSets
 import ReactiveMP: cholinv, logdet
 import KernelFunctions: Kernel
 
@@ -12,7 +13,7 @@ struct GaussianProcess
     meanfunction
     kernelfunction
     finitemarginal
-    testimput
+    testinput
     traininput 
     invKff  
 end
@@ -20,16 +21,23 @@ end
 @node GaussianProcess Stochastic [out, meanfunc, kernelfunc, θ]
 
 @rule GaussianProcess(:out, Marginalisation) (q_meanfunc::PointMass, q_kernelfunc::PointMass, q_θ::UnivariateGaussianDistributionsFamily) = begin 
-    k = with_lengthscale(q_kernelfunc.point, mean(q_θ)) 
-    return GaussianProcess(q_meanfunc.point,q_kernelfunc.point,nothing,nothing,nothing,nothing)
+    kernelfunc = with_lengthscale(q_kernelfunc.point, mean(q_θ)) 
+    return GaussianProcess(q_meanfunc.point,kernelfunc,nothing,nothing,nothing,nothing)
+end
+
+@rule GaussianProcess(:out, Marginalisation) (q_meanfunc::PointMass, q_kernelfunc::PointMass, m_θ::UnivariateGaussianDistributionsFamily) = begin 
+    kernelfunc = with_lengthscale(q_kernelfunc.point, mean(m_θ)) 
+    return GaussianProcess(q_meanfunc.point,kernelfunc,nothing,nothing,nothing,nothing)
 end
 
 ## θ here is 1-D, so it's drawn from univariate distribution 
 @rule GaussianProcess(:θ, Marginalisation) (q_out::GaussianProcess, q_meanfunc::PointMass, q_kernelfunc::PointMass) = begin
     test = q_out.testinput 
+    meanf = q_meanfunc.point
     kernfunc(x) = with_lengthscale(q_kernelfunc.point, x)
     y, Σ = mean_cov(q_out.finitemarginal)
-    log_llh(x) = -1/2 * (y - q_meanfunc.point(test))' * cholinv(kernelmatrix(kernfunc(x),test,test) + cov) * (y- q_meanfunc.point(test)) - 1/2 * logdet(kernelmatrix(kernfunc(x),test,test) + cov)
+    log_llh(x) = -1/2 * (y - meanf.(test))' * cholinv(kernelmatrix(kernfunc(x),test,test) + Diagonal(Σ) + 1e-3*diageye(length(test))) * (y- meanf.(test)) - 1/2 * logdet(kernelmatrix(kernfunc(x),test,test) + Diagonal(Σ) + 1e-3*diageye(length(test)))
+
     return ContinuousUnivariateLogPdf(log_llh)
 end
 
@@ -55,7 +63,14 @@ end
     return Gamma(α, θ)
 end
 
-
+###### important function 
+function ReactiveMP.constvar(name::Symbol, fn::Function) 
+    return ReactiveMP.ConstVariable(name, ReactiveMP.VariableIndividual(), PointMass(fn), of(Message(PointMass(fn), true, false)), 0)
+end
+function ReactiveMP.constvar(name::Symbol, kernel::Kernel ) 
+    return ReactiveMP.ConstVariable(name, ReactiveMP.VariableIndividual(), PointMass(kernel), of(Message(PointMass(kernel), true, false)), 0)
+end
+#################
 #### Some useful functions 
 function make_multivariate_message(messages) ## function for concatinating messages
     m = mean.(messages) 
