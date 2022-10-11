@@ -1,6 +1,6 @@
-using ReactiveMP, GraphPPL,LinearAlgebra, Random
+using ReactiveMP, GraphPPL,LinearAlgebra, Random, KernelFunctions
 import ReactiveMP: cholinv
-
+import KernelFunctions: Kernel
 function predMVN(kernelfunc,meanfunc,xtrain,xtest,y,Σy)
     Kxx                = kernelmatrix(kernelfunc,xtrain,xtrain)
     Kfx                = kernelmatrix(kernelfunc,xtest,xtrain)
@@ -47,17 +47,8 @@ end
 #     return m,K
 # end
 ###############################################
-# function predMVN(gp::GaussianProcess,kernelfunc,meanfunc,xtest,xtrain,y)      #function for computing FE and message on edge τ
-#     Kxx                = kernelmatrix(kernelfunc,xtrain,xtrain)
-#     Kxf                = kernelmatrix(kernelfunc,xtrain,xtest)
-#     invKff             = gp.invKff 
-#     K                  = Kxx - Kxf*invKff*Kxf'
-#     m                  = meanfunc.(xtrain) + Kxf*invKff*(y-meanfunc.(xtest))
-    
-#     return m,K
-# end
-
-function predMVN(gp::GaussianProcess,xtest,xtrain,y)      #function for computing FE and message on edge τ
+##### This function uses the computed inverse of Kff for prediction
+function predMVN_fast(gp::GaussianProcess,xtest,xtrain,y)      #function for computing FE and message on edge τ
     kernelfunc         = gp.kernelfunction 
     meanfunc           = gp.meanfunction
     Kxx                = kernelmatrix(kernelfunc,xtrain,xtrain)
@@ -68,21 +59,13 @@ function predMVN(gp::GaussianProcess,xtest,xtrain,y)      #function for computin
     
     return m,K
 end
-
-function predMVN(meta::ProcessMeta, gp::GaussianProcess, xtrain, xtest, y, Σy) #function for computing marginal of GP 
-    meanfunc           = gp.meanfunction
-    K                  = meta.Kff - meta.Kfx*ReactiveMP.cholinv(meta.Kxx+Σy)*meta.Kfx'
-    m                  = meanfunc.(xtest) + meta.Kfx*ReactiveMP.cholinv(meta.Kxx+Σy)*(y-meanfunc.(xtrain))
-    
-    return m,K
-end
 ####################
 
 
 function ReactiveMP.constvar(name::Symbol, fn::Function) 
   return ReactiveMP.ConstVariable(name, ReactiveMP.VariableIndividual(), PointMass(fn), of(Message(PointMass(fn), true, false)), 0)
 end
-function ReactiveMP.constvar(name::Symbol, kernel::KernelFunctions.Kernel ) 
+function ReactiveMP.constvar(name::Symbol, kernel::Kernel ) 
   return ReactiveMP.ConstVariable(name, ReactiveMP.VariableIndividual(), PointMass(kernel), of(Message(PointMass(kernel), true, false)), 0)
 end
 
@@ -92,17 +75,25 @@ function make_multivariate_message(messages)
     return m,v
 end
 
-# struct ProcessMeta
-#     index
-#     Kxx
-#     Kff
-#     Kfx
-# end
+struct ProcessMeta
+    index
+    Kxx
+    Kff
+    Kfx
+end
 
 @rule GaussianProcess(:out, Marginalisation) (q_meanfunc::PointMass, q_kernelfunc::PointMass) = begin 
     return GaussianProcess(q_meanfunc.point,q_kernelfunc.point,nothing,nothing,nothing,nothing)
 end
 
+# @rule GaussianProcess(:out, Marginalisation) (q_meanfunc::PointMass, q_kernelfunc::Kernel) = begin
+#     @show fieldnames(typeof(q_kernelfunc))
+#     return GaussianProcess(q_meanfunc.point, q_kernelfunc, nothing, nothing,nothing, nothing)
+# end
+# @rule GaussianProcess(:out, Marginalisation) (q_meanfunc::PointMass, q_kernelfunc::Kernel) = begin
+#     @show fieldnames(typeof(q_kernelfunc))
+#     return missing 
+# end
 
 @rule NormalMeanPrecision(:τ, Marginalisation) (q_out::Any, q_μ::GaussianProcess,meta::ProcessMeta) = begin
     m_right, cov_right = mean_cov(q_μ.finitemarginal)
@@ -110,12 +101,13 @@ end
     meanf   = q_μ.meanfunction
     test    = q_μ.testinput
     train   = q_μ.traininput
-    mμ, vμ = predMVN(q_μ,test,[train[meta.index]],m_right)
+    mμ, vμ = predMVN_fast(q_μ,test,[train[meta.index]],m_right) #changed here
     vμ = clamp(vμ[1],1e-8,huge)
     θ = 2 / (var(q_out) + vμ[1] + abs2(mean(q_out) - mμ[1]))
     α = convert(typeof(θ), 1.5)
     return Gamma(α, θ)
 end
+
 
 ###### build KernelFunc node
 # struct KernelFunc{K}
@@ -151,9 +143,9 @@ end
 ###########################
 
 ###### Add rule for backward message on edge "kernfunc" of GP node 
-@rule GaussianProcess[:kernfunc, Marginalisation] (q_out::GaussianProcess, q_meanfunc::PointMass,) = begin
-    return missing 
-end
+# @rule GaussianProcess[:kernfunc, Marginalisation] (q_out::GaussianProcess, q_meanfunc::PointMass,) = begin
+#     return missing 
+# end
 
 # function Distributions.entropy(pm::PointMass{F}) where {F <: Function}
 #     return ReactiveMP.InfCountingReal(Float64,-1)
