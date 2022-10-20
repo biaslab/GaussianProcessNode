@@ -30,7 +30,8 @@ end
     return GaussianProcess(q_meanfunc.point,kernelfunc,nothing,nothing,nothing,nothing)
 end
 
-## θ here is 1-D, so it's drawn from univariate distribution 
+#### EM rule 
+# θ here is 1-D, so it's drawn from univariate distribution 
 @rule GaussianProcess(:θ, Marginalisation) (q_out::GaussianProcess, q_meanfunc::PointMass, q_kernelfunc::PointMass) = begin
     test = q_out.testinput 
     meanf = q_meanfunc.point
@@ -41,6 +42,28 @@ end
     return ContinuousUnivariateLogPdf(log_llh)
 end
 
+# CVI rule 
+@rule GaussianProcess(:θ, Marginalisation) (q_out::GaussianProcess, q_meanfunc::PointMass, q_kernelfunc::PointMass, 
+        m_θ::UnivariateGaussianDistributionsFamily, meta::CVIApproximation{Random._GLOBAL_RNG, ADAM}) = begin 
+    #collect entities in meta
+    n_iter = meta.num_iterations; 
+    num_sample = meta.n_samples ;
+    optimizer = meta.opt;
+    RNG = meta.rng 
+    #collect information from gaussian process q_out 
+    test = q_out.testinput 
+    meanf = q_meanfunc.point
+    kernfunc(x) = with_lengthscale(q_kernelfunc.point, exp(x))
+    y, Σ = mean_cov(q_out.finitemarginal)
+
+    # do CVI 
+    msg_in = m_θ
+    λ_init = naturalparams(msg_in)
+    #use "inv" instead of "cholinv"
+    logp_nc(x) = -1/2 * (y - meanf.(test))' * inv(kernelmatrix(kernfunc(x),test,test) + Diagonal(Σ) + 1e-8*diageye(length(test))) * (y- meanf.(test)) - 1/2 * logdet(kernelmatrix(kernfunc(x),test,test) + Diagonal(Σ) + 1e-8*diageye(length(test)))
+    λ = renderCVI(logp_nc, n_iter, optimizer, RNG, λ_init, msg_in)
+    return convert(NormalMeanVariance, λ)
+end
 ####### Meta structure 
 struct ProcessMeta
     index
@@ -60,6 +83,7 @@ end
     vμ = clamp(vμ[1],1e-8,huge)
     θ = 2 / (var(q_out) + vμ[1] + abs2(mean(q_out) - mμ[1]))
     α = convert(typeof(θ), 1.5)
+
     return Gamma(α, θ)
 end
 
