@@ -68,9 +68,9 @@ version = "0.1.3"
 
 [[deps.ArrayLayouts]]
 deps = ["FillArrays", "LinearAlgebra", "SparseArrays"]
-git-tree-sha1 = "2da56525d2d60e9b205c788e3b61b7aed5e721c6"
+git-tree-sha1 = "1cbe50e27f4df02b8eba54f10a76888b606c47b2"
 uuid = "4c555306-a7a7-4459-81d9-ec55ddd5c99a"
-version = "0.8.15"
+version = "0.8.16"
 
 [[deps.Artifacts]]
 uuid = "56f22d72-fd6d-98f1-02f0-08ddc0907c33"
@@ -332,9 +332,9 @@ uuid = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 
 [[deps.Distributions]]
 deps = ["ChainRulesCore", "DensityInterface", "FillArrays", "LinearAlgebra", "PDMats", "Printf", "QuadGK", "Random", "SparseArrays", "SpecialFunctions", "Statistics", "StatsBase", "StatsFuns", "Test"]
-path = "F:\\Tue\\PhD\\Distributions.jl"
+git-tree-sha1 = "a7756d098cbabec6b3ac44f369f74915e8cfd70a"
 uuid = "31c24e10-a181-5473-b8eb-7969acd0382f"
-version = "0.25.76"
+version = "0.25.79"
 
 [[deps.DocStringExtensions]]
 deps = ["LibGit2"]
@@ -569,7 +569,7 @@ version = "2.74.0+1"
 
 [[deps.GraphPPL]]
 deps = ["MacroTools", "TupleTools"]
-path = "F:\\Tue\\PhD\\GraphPPL.jl"
+path = "/Users/nguyenhuuminhhoang/PhD/GraphPPL.jl"
 uuid = "b3f8163a-e979-4e85-b43e-1f63d8c8b42c"
 version = "3.1.0"
 
@@ -763,9 +763,9 @@ version = "0.1.12"
 
 [[deps.LazyArrays]]
 deps = ["ArrayLayouts", "FillArrays", "LinearAlgebra", "MacroTools", "MatrixFactorizations", "SparseArrays", "StaticArrays"]
-git-tree-sha1 = "0d929b6673169fb0432ca1349136cbcec271d3e2"
+git-tree-sha1 = "f6742270b551e03bd8ba64e1c754f5fab089ab63"
 uuid = "5078a376-72f3-5289-bfd5-ec5146d43c02"
-version = "0.22.13"
+version = "0.22.16"
 
 [[deps.LazyArtifacts]]
 deps = ["Artifacts", "Pkg"]
@@ -1212,7 +1212,7 @@ version = "1.5.3"
 
 [[deps.ReactiveMP]]
 deps = ["DataStructures", "Distributions", "DomainIntegrals", "DomainSets", "FastGaussQuadrature", "ForwardDiff", "HCubature", "KernelFunctions", "LazyArrays", "LinearAlgebra", "LoopVectorization", "MacroTools", "Optim", "PositiveFactorizations", "Random", "Requires", "Rocket", "SpecialFunctions", "StaticArrays", "StatsBase", "StatsFuns", "TinyHugeNumbers", "TupleTools", "Unrolled"]
-path = "F:\\Tue\\PhD\\ReactiveMP"
+path = "/Users/nguyenhuuminhhoang/PhD/ReactiveMP.jl"
 uuid = "a194aa59-28ba-4574-a09c-4a745416d6e3"
 version = "3.1.0"
 
@@ -1283,7 +1283,7 @@ version = "1.6.0"
 
 [[deps.RxInfer]]
 deps = ["DataStructures", "Distributions", "DomainSets", "GraphPPL", "LinearAlgebra", "MacroTools", "Optim", "ProgressMeter", "Random", "ReactiveMP", "Reexport", "Rocket", "TupleTools"]
-path = "F:\\Tue\\PhD\\RxInfer.jl"
+path = "/Users/nguyenhuuminhhoang/PhD/RxInfer.jl"
 uuid = "86711068-29c9-4ff7-b620-ae75d7495b3d"
 version = "2.1.0"
 
@@ -1395,9 +1395,9 @@ version = "1.0.0"
 
 [[deps.Static]]
 deps = ["IfElse"]
-git-tree-sha1 = "0559586098f3cbd2e835461254ea2fcffa4a61ba"
+git-tree-sha1 = "c35b107b61e7f34fa3f124026f2a9be97dea9e1c"
 uuid = "aedffcd0-7271-4cad-89d0-dc628f76c6d3"
-version = "0.8.2"
+version = "0.8.3"
 
 [[deps.StaticArrays]]
 deps = ["LinearAlgebra", "Random", "StaticArraysCore", "Statistics"]
