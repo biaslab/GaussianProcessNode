@@ -1,19 +1,38 @@
+using LoopVectorization
+import KernelFunctions: with_lengthscale, kernelmatrix 
+import ReactiveMP: AbstractApproximationMethod
+
+
+## create UniSGP meta  
+struct UniSGPMeta{I,K}
+    method      :: Union{Nothing,AbstractApproximationMethod}
+    Xu          :: I    # inducing inputs
+    kernel      :: K
+end
+getmethod(meta::UniSGPMeta) = meta.method
+getInducingInput(meta::UniSGPMeta) = meta.Xu
+getKernel(meta::UniSGPMeta) = meta.kernel
+
 struct GPCache
     cache_matrices::Dict{Tuple{Symbol, Tuple{Int, Int}}, Matrix{Float64}}
     cache_vectors::Dict{Tuple{Symbol, Int}, Vector{Float64}}
 end
 
-## create GP meta  
-struct NewSGPMeta{I,K}
+## create MultiSGP meta 
+struct MultiSGPMeta{I,T,K}
+    method      :: Union{Nothing,AbstractApproximationMethod}
     Xu          :: I    # inducing inputs
-    C           :: Union{Nothing,Matrix}    # co-regionalization matrix 
+    C           :: Union{Nothing,T}    # co-regionalization matrix 
     kernel      :: K
     GPCache     :: Union{Nothing,GPCache}
 end
-getInducingInput(meta::NewSGPMeta) = meta.Xu
-getCoregionalizationMatrix(meta::NewSGPMeta) = meta.C
-getKernel(meta::NewSGPMeta) = meta.kernel
-getGPCache(meta::NewSGPMeta) = meta.GPCache
+getInducingInput(meta::MultiSGPMeta) = meta.Xu
+getCoregionalizationMatrix(meta::MultiSGPMeta) = meta.C
+getKernel(meta::MultiSGPMeta) = meta.kernel
+getGPCache(meta::MultiSGPMeta) = meta.GPCache
+getmethod(meta::MultiSGPMeta) = meta.method
+
+
 
 
 GPCache() = GPCache(Dict{Tuple{Symbol, Tuple{Int, Int}}, Matrix{Float64}}(), Dict{Tuple{Symbol, Int}, Vector{Float64}}())
