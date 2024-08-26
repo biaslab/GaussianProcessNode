@@ -132,7 +132,7 @@ end
     kernel = getKernel(meta)
 
     Ψ1 = kernelmatrix(kernel(θ), [μ_in], Xu)
-    Ψ2 = kernelmatrix(kernel(θ), Xu, [μ_in]) * kernelmatrix(kernel(θ), [μ_in], Xu)
+    Ψ2 = kernelmatrix(kernel(θ), Xu, [μ_in]) * kernelmatrix(kernel(θ), [μ_in], Xu) + 1e-7*I
 
     ξ_v = μ_y * w * Ψ1' #weighted-mean
     W_v = w * Ψ2  #precision 
@@ -169,7 +169,7 @@ end
     
     Ψ0 =  getindex(kernelmatrix(kernel(θ), [μ_in], [μ_in]),1)
     Ψ1 =  kernelmatrix(kernel(θ), [μ_in], Xu)
-    Ψ2 =  kernelmatrix(kernel(θ), Xu, [μ_in]) * kernelmatrix(kernel(θ), [μ_in], Xu)
+    Ψ2 =  kernelmatrix(kernel(θ), Xu, [μ_in]) * kernelmatrix(kernel(θ), [μ_in], Xu) + 1e-7 * I
     
     I1 = clamp(Ψ0 - tr(Kuu_inverse * Ψ2),1e-12,1e12)
     I2 = clamp(μ_y^2 -2*μ_y * (Ψ1 * μ_v)[1] + tr((Σ_v + μ_v * μ_v') * Ψ2 ), 1e-12,1e12)
@@ -187,7 +187,7 @@ end
     
     Ψ0 = getindex(kernelmatrix(kernel(θ), [μ_in], [μ_in]),1)
     Ψ1 = kernelmatrix(kernel(θ), [μ_in], Xu)
-    Ψ2 =  kernelmatrix(kernel(θ), Xu, [μ_in]) * kernelmatrix(kernel(θ), [μ_in], Xu)
+    Ψ2 =  kernelmatrix(kernel(θ), Xu, [μ_in]) * kernelmatrix(kernel(θ), [μ_in], Xu) + 1e-7 * I
     
     I1 = clamp(Ψ0 - tr(Kuu_inverse * Ψ2),1e-12,1e12)
     I2 = clamp(μ_y^2 + v_y -2*μ_y * (Ψ1 * μ_v)[] + tr((Σ_v + μ_v * μ_v') * Ψ2 ), 1e-12,1e12)
@@ -278,7 +278,7 @@ end
     
     Ψ0 = getindex(kernelmatrix(kernel(θ), [μ_in], [μ_in]),1)
     Ψ1 = kernelmatrix(kernel(θ), [μ_in], Xu)
-    Ψ2 = kernelmatrix(kernel(θ), Xu, [μ_in]) * kernelmatrix(kernel(θ), [μ_in], Xu)
+    Ψ2 = kernelmatrix(kernel(θ), Xu, [μ_in]) * kernelmatrix(kernel(θ), [μ_in], Xu) + 1e-7*I
 
     I1 = clamp(Ψ0 - tr(Kuu_inverse * Ψ2),1e-12,1e12)
     I2 = clamp(μ_y^2 -2*μ_y * (Ψ1 * μ_v)[1] + tr((Σ_v + μ_v * μ_v') * Ψ2 ), 1e-12,1e12)
@@ -299,7 +299,7 @@ end
     
     Ψ0 = getindex(kernelmatrix(kernel(θ), [μ_in], [μ_in]),1)
     Ψ1 = kernelmatrix(kernel(θ), [μ_in], Xu)
-    Ψ2 = kernelmatrix(kernel(θ), Xu, [μ_in]) * kernelmatrix(kernel(θ), [μ_in], Xu)
+    Ψ2 = kernelmatrix(kernel(θ), Xu, [μ_in]) * kernelmatrix(kernel(θ), [μ_in], Xu) + 1e-7*I
 
     I1 = clamp(Ψ0 - tr(Kuu_inverse * Ψ2),1e-12,1e12)
     I2 = clamp(μ_y^2 + v_y -2*μ_y * (Ψ1 * μ_v)[1] + tr((Σ_v + μ_v * μ_v') * Ψ2 ), 1e-12,1e12)

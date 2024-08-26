@@ -84,7 +84,7 @@ end
     A = (x) -> kron(C,kernelmatrix(kernel(θ),[x],[x]) - kernelmatrix(kernel(θ),[x],Xu)*Kuu_inverse*kernelmatrix(kernel(θ),Xu,[x]))
     B = (x) -> kron(C,kernelmatrix(kernel(θ), [x], Xu))
     
-    log_backwardmess = (x) -> -(0.5  * (tr(W*(A(x) + Σ_y + B(x)*Σ_v*B(x)')) + (μ_y - B(x)*μ_v)' * W * (μ_y - B(x)*μ_v)))
+    log_backwardmess = (x) -> -0.5  * tr(W*(A(x) + B(x)*(Σ_v + μ_v*μ_v')*B(x)')) + μ_y' * W * B(x) * μ_v
  
     return ContinuousMultivariateLogPdf(UnspecifiedDomain(),log_backwardmess)
 end
@@ -124,7 +124,7 @@ end
     Ψ1 = getcache(cache,(:Ψ1,M))
     Ψ2 = getcache(cache,(:Ψ2, (M,M)))
     Ψ1 = approximate_kernel_expectation(getmethod(meta),(x) -> kernelmatrix(kernel(θ), [x], Xu),q_in)
-    Ψ2 = approximate_kernel_expectation(getmethod(meta),(x) -> kernelmatrix(kernel(θ), Xu, [x]) * kernelmatrix(kernel(θ), [x], Xu), q_in) 
+    Ψ2 = approximate_kernel_expectation(getmethod(meta),(x) -> kernelmatrix(kernel(θ), Xu, [x]) * kernelmatrix(kernel(θ), [x], Xu), q_in) + 1e-7*I
     ξ_v = Float64[]
     μ_y_transformed = W * μ_y 
     for mu_y in μ_y_transformed
@@ -149,7 +149,7 @@ end
     Ψ1 = getcache(cache,(:Ψ1,M))
     Ψ2 = getcache(cache,(:Ψ2, (M,M)))
     Ψ1 = approximate_kernel_expectation(getmethod(meta),(x) -> kernelmatrix(kernel(θ), [x], Xu),q_in)
-    Ψ2 = approximate_kernel_expectation(getmethod(meta),(x) -> kernelmatrix(kernel(θ), Xu, [x]) * kernelmatrix(kernel(θ), [x], Xu), q_in) 
+    Ψ2 = approximate_kernel_expectation(getmethod(meta),(x) -> kernelmatrix(kernel(θ), Xu, [x]) * kernelmatrix(kernel(θ), [x], Xu), q_in) + 1e-7*I
     ξ_v = Float64[]
     μ_y_transformed = W * μ_y 
     for mu_y in μ_y_transformed
@@ -180,7 +180,7 @@ end
 
     Ψ0 = approximate_kernel_expectation(getmethod(meta),(x) -> kernelmatrix(kernel(θ), [x], [x]),q_in)[1]
     Ψ1 = approximate_kernel_expectation(getmethod(meta),(x) -> kernelmatrix(kernel(θ), [x], Xu),q_in)
-    Ψ2 = approximate_kernel_expectation(getmethod(meta),(x) -> kernelmatrix(kernel(θ), Xu, [x]) * kernelmatrix(kernel(θ), [x], Xu), q_in) 
+    Ψ2 = approximate_kernel_expectation(getmethod(meta),(x) -> kernelmatrix(kernel(θ), Xu, [x]) * kernelmatrix(kernel(θ), [x], Xu), q_in) + 1e-7*I
 
     trace_A = mul_A_B!(cache,Kuu_inverse,Ψ2,M) |> tr #trA =tr(Kuu_inverse * Ψ2)
     I1 = (Ψ0 - trace_A) .* C # kron(C, getindex(Ψ0,1) - trace_A)
@@ -194,6 +194,28 @@ end
     end
     I2 = μ_y * μ_y' + Σ_y - μ_y * E' - E * μ_y' + Ψ_5 
     return WishartFast(D+2, I1 + I2)
+end
+
+# θ rule 
+@rule MultiSGP(:θ, Marginalisation) (q_out::Any, q_in::MultivariateGaussianDistributionsFamily,q_v::MultivariateGaussianDistributionsFamily, q_w::Any, meta::MultiSGPMeta,) = begin
+    μ_y = mean(q_out)
+    μ_v, Σ_v = mean_cov(q_v)
+    R_v = Σ_v + μ_v * μ_v'
+    W_bar = mean(q_w)
+    kernel = getKernel(meta)
+    Xu = getInducingInput(meta)
+    C = getCoregionalizationMatrix(meta)
+
+    Kuu_inverse = (θ) -> cholinv(kernelmatrix(kernel(θ),Xu))
+    Ψ_0 = (θ) -> approximate_kernel_expectation(getmethod(meta),(x) -> kernelmatrix(kernel(θ), [x], [x]),q_in)[1]
+    Ψ_1 = (θ) -> approximate_kernel_expectation(getmethod(meta),(x) -> kernelmatrix(kernel(θ), [x], Xu),q_in)
+    Ψ_2 = (θ) -> approximate_kernel_expectation(getmethod(meta),(x) -> kernelmatrix(kernel(θ), Xu, [x]) * kernelmatrix(kernel(θ), [x], Xu), q_in) + 1e-7*I 
+
+    I1 = (θ) -> kron(C, Ψ_0(θ) - tr(Kuu_inverse(θ) * Ψ_2(θ)))
+    Ψ_1_tilde = (θ) -> kron(C, Ψ_1(θ))
+    Ψ_3 = (θ) -> kron(W_bar, Ψ_2(θ))
+    log_backwardmess = (θ) -> -0.5 * tr(W_bar * I1(θ)) + μ_y' * W_bar * Ψ_1_tilde(θ) * μ_v - 0.5 * tr(Ψ_3(θ) * R_v)
+    return ContinuousMultivariateLogPdf(UnspecifiedDomain(),log_backwardmess)
 end
 #average energy 
 @average_energy MultiSGP (q_out::MultivariateNormalDistributionsFamily, q_in::MultivariateGaussianDistributionsFamily, q_v::MultivariateNormalDistributionsFamily, q_w::Wishart,q_θ::PointMass, meta::MultiSGPMeta,) = begin
@@ -214,7 +236,7 @@ end
     Ψ2 = getcache(cache,(:Ψ2, (M,M)))
     Ψ0 = approximate_kernel_expectation(getmethod(meta),(x) -> kernelmatrix(kernel(θ), [x], [x]),q_in)[1]
     Ψ1 = approximate_kernel_expectation(getmethod(meta),(x) -> kernelmatrix(kernel(θ), [x], Xu),q_in)
-    Ψ2 = approximate_kernel_expectation(getmethod(meta),(x) -> kernelmatrix(kernel(θ), Xu, [x]) * kernelmatrix(kernel(θ), [x], Xu), q_in) 
+    Ψ2 = approximate_kernel_expectation(getmethod(meta),(x) -> kernelmatrix(kernel(θ), Xu, [x]) * kernelmatrix(kernel(θ), [x], Xu), q_in) + 1e-7*I
 
     μ_v = [view(μ_v,i:i+M-1) for i=1:M:M*D]  
     Σ_v = create_blockmatrix(Σ_v,D,M)
@@ -253,7 +275,7 @@ end
     Ψ2 = getcache(cache,(:Ψ2, (M,M)))
     Ψ0 = approximate_kernel_expectation(getmethod(meta),(x) -> kernelmatrix(kernel(θ), [x], [x]),q_in)[1]
     Ψ1 = approximate_kernel_expectation(getmethod(meta),(x) -> kernelmatrix(kernel(θ), [x], Xu),q_in)
-    Ψ2 = approximate_kernel_expectation(getmethod(meta),(x) -> kernelmatrix(kernel(θ), Xu, [x]) * kernelmatrix(kernel(θ), [x], Xu), q_in) 
+    Ψ2 = approximate_kernel_expectation(getmethod(meta),(x) -> kernelmatrix(kernel(θ), Xu, [x]) * kernelmatrix(kernel(θ), [x], Xu), q_in) + 1e-7*I
     μ_v = [view(μ_v,i:i+M-1) for i=1:M:M*D]  
     Σ_v = create_blockmatrix(Σ_v,D,M)
     trace_A = mul_A_B!(cache,Kuu_inverse,Ψ2,M) |> tr #trA =tr(Kuu_inverse * Ψ2)
