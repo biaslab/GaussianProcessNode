@@ -85,6 +85,22 @@ struct MultiSGP end
 #     end
 #     return MvNormalMeanPrecision(μ_y, W)
 # end
+# for regression with known input-output
+@rule MultiSGP(:out, Marginalisation) (q_in::PointMass, q_v::MultivariateNormalDistributionsFamily, q_w::Wishart,q_θ::PointMass, meta::MultiSGPMeta,) = begin
+    μ_v = mean(q_v)
+    W = mean(q_w) 
+    θ = mean(q_θ)
+    Xu = getInducingInput(meta)
+    kernel = getKernel(meta)
+    cache = getGPCache(meta)
+    Ψ1_trans = getΨ1_trans(meta)
+    M = length(Xu) #number of inducing points
+    D = size(W,1)
+    method = getmethod(meta)
+    @inbounds μ_v = [view(μ_v,i:i+M-1) for i=1:M:M*D] 
+    kernelmatrix!(Ψ1_trans, kernel(θ),Xu, [mean(q_in)])
+    return MvNormalMeanPrecision(map!(yi -> jdotavx(Ψ1_trans, yi),getcache(cache, (:μ_y, D)), μ_v), W)
+end
 
 ### faster code #####
 @rule MultiSGP(:out, Marginalisation) (q_in::MultivariateNormalDistributionsFamily, q_v::MultivariateNormalDistributionsFamily, q_w::Wishart,q_θ::PointMass, meta::MultiSGPMeta,) = begin
@@ -286,6 +302,28 @@ end
 #     return MvNormalWeightedMeanPrecision(ξ_v, W_v)
 # end
 
+#regression 
+@rule MultiSGP(:v, Marginalisation) (q_out::PointMass, q_in::PointMass, q_w::Any,q_θ::PointMass, meta::MultiSGPMeta) = begin 
+    W = mean(q_w)
+    μ_y = mean(q_out)
+    θ = mean(q_θ)
+    cache = getGPCache(meta)
+    Xu = getInducingInput(meta)
+    kernel = getKernel(meta)
+    M = length(Xu) #number of inducing points
+    D = length(μ_y) #dimension
+    method = getmethod(meta)
+    Ψ1_trans = getΨ1_trans(meta) 
+    Ψ2 = getΨ2(meta) 
+
+    kernelmatrix!(Ψ1_trans,kernel(θ),Xu, [mean(q_in)])
+    Ψ2 =  kernelmatrix(kernel(θ), Xu, [mean(q_in)]) * kernelmatrix(kernel(θ), [mean(q_in)], Xu)
+
+    W_v = getcache(cache, (:W_v, (D*M,D*M)))
+    kron!(W_v,W, Ψ2) # precision matrix 
+    return MvNormalWeightedMeanPrecision(vcat(Ψ1_trans .* mul_A_B!(cache,μ_y',W,1,D)...), W_v)
+end
+
 ##faster 
 @rule MultiSGP(:v, Marginalisation) (q_out::MultivariateGaussianDistributionsFamily, q_in::MultivariateGaussianDistributionsFamily, q_w::Any,q_θ::PointMass, meta::MultiSGPMeta) = begin 
     W = mean(q_w)
@@ -364,6 +402,46 @@ end
 # end
 
 #### faster 
+#regression
+@rule MultiSGP(:w, Marginalisation) (q_out::PointMass, q_in::PointMass, q_v::MultivariateNormalDistributionsFamily,q_θ::PointMass, meta::MultiSGPMeta,) = begin
+    μ_y = mean(q_out)
+    μ_v, Σ_v = mean_cov(q_v)
+    θ = mean(q_θ)
+    Xu = getInducingInput(meta)
+    kernel = getKernel(meta)
+    cache = getGPCache(meta)
+    M = length(Xu) #number of inducing points
+    D = length(μ_y) #dimension
+    C = diageye(D)
+    Σ_v += mul_A_B!(cache,μ_v,μ_v',M*D)
+    R_v = create_blockmatrix(Σ_v,D,M)
+    μ_v = [view(μ_v,i:i+M-1) for i=1:M:M*D]  
+    Kuu_inverse = getKuuInverse(meta)
+    method = getmethod(meta)
+
+    Ψ0 = getΨ0(meta)
+    Ψ1_trans = getΨ1_trans(meta) 
+    Ψ2 = getΨ2(meta) 
+
+    kernelmatrix!(Ψ0,kernel(θ), [mean(q_in)], [mean(q_in)])
+    kernelmatrix!(Ψ1_trans,kernel(θ), Xu,[mean(q_in)])
+    Ψ2 = kernelmatrix(kernel(θ), Xu, [mean(q_in)]) * kernelmatrix(kernel(θ), [mean(q_in)], Xu)
+
+    Ψ0 .-= tr(Kuu_inverse * Ψ2)
+    I1 = map(x -> Ψ0[1] * x, C) # kron(C, getindex(Ψ0,1) - trace_A)
+
+    E = getcache(cache,(:E,D))
+    map!(yi -> jdotavx(Ψ1_trans, yi),E, μ_v)
+    Ψ_4 = getcache(cache,(:Ψ_4,(D,D)))
+    map!(Rv_i -> sum(Rv_i .* Ψ2'),Ψ_4, R_v)
+    tmp = mul_A_B!(cache,μ_y, E',D)
+    tmp += tmp'
+    Ψ_4 += mul_A_B!(cache, μ_y, μ_y',D)
+    Ψ_4 -= tmp #this is I2
+    Ψ_4 += I1
+    return WishartFast(D+2, Ψ_4)
+end
+
 @rule MultiSGP(:w, Marginalisation) (q_out::MultivariateNormalDistributionsFamily, q_in::MultivariateNormalDistributionsFamily, q_v::MultivariateNormalDistributionsFamily,q_θ::PointMass, meta::MultiSGPMeta,) = begin
     μ_y, Σ_y = mean_cov(q_out)
     μ_v, Σ_v = mean_cov(q_v)
@@ -541,6 +619,37 @@ end
 #     return 0.5*tr(W_bar*I1) + 0.5*D*log(2π) - 0.5*E_logW + 0.5 * tr(W_bar * I2)
 # end
 ###### faster 
+#regression 
+@average_energy MultiSGP (q_out::PointMass, q_in::PointMass, q_v::MultivariateNormalDistributionsFamily, q_w::Wishart,q_θ::PointMass, meta::MultiSGPMeta,) = begin
+    μ_y, Σ_y = mean_cov(q_out)
+    μ_v, Σ_v = mean_cov(q_v)
+    W_bar = mean(q_w) 
+    θ = mean(q_θ)
+    E_logW = mean(logdet,q_w)
+    Xu = getInducingInput(meta)
+    cache = getGPCache(meta)
+    kernel = getKernel(meta)
+    D = length(μ_y)
+    M = length(Xu) #number of inducing points
+    Kuu_inverse = getKuuInverse(meta)
+    method = getmethod(meta)
+    Σ_v += mul_A_B!(cache,μ_v,μ_v',M*D) #Rv = Σ_v + μ_v * μ_v'
+    V = mul_A_B!(cache,μ_v,μ_y',M*D,D) |> (x) -> mul_A_B!(GPCache(),x, W_bar,M*D,D)
+    sumdiagV = sum_diagonal_M(V,M)
+    sumRvblk_W = sum(create_blockmatrix(Σ_v,D,M) .* W_bar)
+    Ry = Σ_y + μ_y * μ_y'
+
+    Ψ0 = getΨ0(meta)
+    Ψ1_trans = getΨ1_trans(meta) 
+    Ψ2 = getΨ2(meta) 
+
+    kernelmatrix!(Ψ0,kernel(θ), [mean(q_in)], [mean(q_in)])
+    kernelmatrix!(Ψ1_trans,kernel(θ), Xu,[mean(q_in)])
+    Ψ2 = kernelmatrix(kernel(θ), Xu, [mean(q_in)]) * kernelmatrix(kernel(θ), [mean(q_in)], Xu)
+
+    return  0.5*D*log(2π) - 0.5*E_logW + 0.5*tr(W_bar*Ry)+ 0.5 * tr(W_bar) * (Ψ0[1] - sum(Kuu_inverse .* Ψ2)) - sum(sumdiagV .* Ψ1_trans) + 0.5 * sum(Ψ2 .* sumRvblk_W)
+end
+
 @average_energy MultiSGP (q_out::MultivariateNormalDistributionsFamily, q_in::MultivariateGaussianDistributionsFamily, q_v::MultivariateNormalDistributionsFamily, q_w::Wishart,q_θ::PointMass, meta::MultiSGPMeta,) = begin
     μ_y, Σ_y = mean_cov(q_out)
     μ_v, Σ_v = mean_cov(q_v)
